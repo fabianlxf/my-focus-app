@@ -1,51 +1,47 @@
-// src/pushClient.ts
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8787';
-const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY as string;
+const PUBLIC_VAPID = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
 
-// Helper: Base64 (URL-Safe) → Uint8Array
 function urlBase64ToUint8Array(base64String: string) {
   const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const raw = atob(base64);
-  const output = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; ++i) output[i] = raw.charCodeAt(i);
-  return output;
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; ++i) arr[i] = raw.charCodeAt(i);
+  return arr;
 }
 
-// Registrierung + Subscription speichern
 export async function enablePushForUser(userId: string) {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    throw new Error('Push wird von diesem Browser nicht unterstützt');
+    throw new Error('Push wird nicht unterstützt.');
   }
-
   const perm = await Notification.requestPermission();
-  if (perm !== 'granted') throw new Error('Benachrichtigungs-Erlaubnis abgelehnt');
+  if (perm !== 'granted') throw new Error('Benachrichtigungen abgelehnt.');
 
   const reg = await navigator.serviceWorker.register('/sw.js');
-  const sub = await reg.pushManager.subscribe({
+
+  const existing = await reg.pushManager.getSubscription();
+  const subscription = existing || await reg.pushManager.subscribe({
     userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC)
+    applicationServerKey: urlBase64ToUint8Array(PUBLIC_VAPID)
   });
 
-  const res = await fetch(`${API_BASE}/api/push/save-subscription`, {
+  const res = await fetch('/api/push/save-subscription', {
     method: 'POST',
     headers: { 'Content-Type':'application/json' },
-    body: JSON.stringify({ userId, subscription: sub })
+    body: JSON.stringify({ userId, subscription })
   });
-  if (!res.ok) throw new Error('Subscription speichern fehlgeschlagen');
+  if (!res.ok) throw new Error('Subscription speichern fehlgeschlagen.');
 }
 
-// Test-Push senden
 export async function sendTestPush(userId: string) {
-  const res = await fetch(`${API_BASE}/api/push/send`, {
+  const res = await fetch('/api/push/send', {
     method: 'POST',
     headers: { 'Content-Type':'application/json' },
     body: JSON.stringify({
       userId,
       title: 'Fokus-Impuls',
-      body: 'Mini-Schritt: 3 Atemzüge + 2 Sätze laut üben.',
+      body: 'Mini-Schritt: 5 Minuten jetzt 👀',
       url: '/today'
     })
   });
-  if (!res.ok) throw new Error('Push senden fehlgeschlagen');
+  if (!res.ok) throw new Error('Push senden fehlgeschlagen.');
 }
