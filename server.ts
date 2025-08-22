@@ -1,4 +1,4 @@
-// server.ts – Ein-Port Dev-Server (Express + Vite-Middleware) + API
+// server.ts – Ein-Port Dev-Server (Express + Vite-Middleware) + API + Push
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
@@ -40,27 +40,54 @@ function tryParseJsonFromText(text?: string) {
 }
 
 async function createServer() {
-  // Dev: Vite als Middleware (ein Port für Frontend & API)
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await (await import('vite')).createServer({
-      root: process.cwd(),
-      server: { middlewareMode: true }
-    });
-    app.use(vite.middlewares);
-  } else {
-    // Prod: statische Dateien aus dist
-    const dist = path.resolve(__dirname, 'dist');
-    app.use(express.static(dist));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(dist, 'index.html'));
-    });
-  }
+  // ---- API ROUTES ZUERST (damit /api/* sicher greift) ----
 
-  // ---- Routes
+  // Health & Debug
   app.get('/api/health', (_req, res) => res.json({ ok: true }));
+  app.get('/api/debug/env', (_req, res) => {
+    res.json({
+      hasOpenAIKey: !!process.env.OPENAI_API_KEY,
+      nodeEnv: process.env.NODE_ENV || null
+    });
+  });
 
+  // Suggestions (mit Mock-Schalter ?mock=1 und robustem Logging)
   app.post('/api/ai/suggestions', async (req, res) => {
     try {
+      console.log('[POST] /api/ai/suggestions', { bodyKeys: Object.keys(req.body || {}) });
+
+      const useMock =
+        !process.env.OPENAI_API_KEY ||
+        String(req.query.mock || '').toLowerCase() === '1';
+
+      if (useMock) {
+        return res.json({
+          suggestions: [
+            {
+              title: 'Mini-Schritt jetzt',
+              content: 'Starte mit 5 Minuten. Kleine Schritte schlagen Perfektion.',
+              type: 'suggestion',
+              source: 'Mock',
+              relevanceScore: 0.9
+            },
+            {
+              title: 'Buchtipp: Deep Work',
+              content: 'Cal Newport – Fokus-System gegen Ablenkungen.',
+              type: 'insight',
+              source: 'Book',
+              relevanceScore: 0.85
+            },
+            {
+              title: 'Reminder: Review um 17:00',
+              content: 'Reflektiere 1 Fortschritt, 1 Hindernis, 1 nächsten Schritt.',
+              type: 'reminder',
+              source: 'Mock',
+              relevanceScore: 0.8
+            }
+          ]
+        });
+      }
+
       const goals = (req.body?.goals ?? []) as Array<any>;
       const goalsContext = goals.map(g =>
         `Goal: ${g.title} (${g.category}, ${g.priority} priority, ${g.progress}% complete) - ${g.description}`
@@ -71,19 +98,29 @@ async function createServer() {
         'Each item: {title, content, type("insight"/"suggestion"/"reminder"), source, relevanceScore}. Only output JSON.';
       const user = `Based on these goals, provide 3-4 items.\n\n${goalsContext}`;
 
-      const r = await client.responses.create({
-        model: 'gpt-4o-mini',
-        temperature: 0.7,
-        max_output_tokens: 800,
-        input: [
-          { role: 'system', content: system },
-          { role: 'user',   content: user }
-        ]
-      });
+      let suggestions: any[] = [];
+      try {
+        const r = await client.responses.create({
+          model: 'gpt-4o-mini',
+          temperature: 0.7,
+          max_output_tokens: 800,
+          input: [
+            { role: 'system', content: system },
+            { role: 'user',   content: user }
+          ]
+        });
+        const text = (r as any).output_text as string | undefined;
+        const parsed = tryParseJsonFromText(text) ?? { suggestions: [] };
+        suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
+      } catch (aiErr: any) {
+        console.error('[AI] suggestions error:', {
+          name: aiErr?.name,
+          status: aiErr?.status,
+          message: aiErr?.message
+        });
+        suggestions = [];
+      }
 
-      const text = (r as any).output_text as string | undefined;
-      const parsed = tryParseJsonFromText(text) ?? { suggestions: [] };
-      const suggestions = Array.isArray(parsed.suggestions) ? parsed.suggestions : [];
       const safe = suggestions.slice(0, 4).map((s: any) => ({
         title: String(s?.title ?? 'AI Insight'),
         content: String(s?.content ?? ''),
@@ -94,33 +131,51 @@ async function createServer() {
 
       res.json({ suggestions: safe });
     } catch (e: any) {
-      console.error('suggestions error', e?.response?.data ?? e);
-      res.status(500).json({ error: 'AI suggestions failed' });
+      console.error('suggestions route fatal', e);
+      res.status(500).json({ error: 'AI suggestions failed hard' });
     }
   });
 
+  // Analyze (mit Logging + Fallback)
   app.post('/api/ai/analyze', async (req, res) => {
     try {
-      const g = req.body?.goal ?? {};
-      const r = await client.responses.create({
-        model: 'gpt-4o-mini',
-        temperature: 0.6,
-        max_output_tokens: 200,
-        input: [
-          { role: 'system', content: 'You are a concise goal coach. Return JSON {insight,nextStep} only.' },
-          { role: 'user',   content: `Analyze: ${JSON.stringify(g)}` }
-        ]
-      });
+      console.log('[POST] /api/ai/analyze', { bodyKeys: Object.keys(req.body || {}) });
 
-      const text = (r as any).output_text as string | undefined;
-      const parsed = tryParseJsonFromText(text) ?? {};
-      res.json({
-        insight: parsed.insight ?? 'Keep going!',
-        nextStep: parsed.nextStep ?? 'Break the next task into 10-minute steps.'
-      });
+      const g = req.body?.goal ?? {};
+      let out: any = null;
+
+      try {
+        const r = await client.responses.create({
+          model: 'gpt-4o-mini',
+          temperature: 0.6,
+          max_output_tokens: 200,
+          input: [
+            { role: 'system', content: 'You are a concise goal coach. Return JSON {insight,nextStep} only.' },
+            { role: 'user',   content: `Analyze: ${JSON.stringify(g)}` }
+          ]
+        });
+        const text = (r as any).output_text as string | undefined;
+        const parsed = tryParseJsonFromText(text) ?? {};
+        out = {
+          insight: parsed.insight ?? 'Keep going!',
+          nextStep: parsed.nextStep ?? 'Break the next task into 10-minute steps.'
+        };
+      } catch (aiErr: any) {
+        console.error('[AI] analyze error:', {
+          name: aiErr?.name,
+          status: aiErr?.status,
+          message: aiErr?.message
+        });
+        out = {
+          insight: 'Du machst Fortschritte. Weiter so!',
+          nextStep: 'Formuliere einen 10-Minuten-Schritt und führe ihn heute aus.'
+        };
+      }
+
+      res.json(out);
     } catch (e: any) {
-      console.error('analyze error', e?.response?.data ?? e);
-      res.status(500).json({ error: 'AI analyze failed' });
+      console.error('analyze route fatal', e);
+      res.status(500).json({ error: 'AI analyze failed hard' });
     }
   });
 
@@ -148,6 +203,21 @@ async function createServer() {
       res.status(500).json({ error: 'push failed' });
     }
   });
+
+  // ---- Vite-Dev-Middleware NACH den API-Routen (ein Port)
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await (await import('vite')).createServer({
+      root: process.cwd(),
+      server: { middlewareMode: true }
+    });
+    app.use(vite.middlewares);
+  } else {
+    const dist = path.resolve(__dirname, 'dist');
+    app.use(express.static(dist));
+    app.get('*', (_req, res) => {
+      res.sendFile(path.join(dist, 'index.html'));
+    });
+  }
 
   app.listen(PORT, () => {
     console.log(`Dev server up on http://localhost:${PORT}`);
