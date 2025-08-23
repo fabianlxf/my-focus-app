@@ -2,13 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { Goal, Notification } from '../types';
 import { NotificationCard } from './NotificationCard';
 import { fetchSuggestions } from '../services/aiProxy';
-import { Brain, Settings } from 'lucide-react';
+import { Brain, Settings, Sun, Moon } from 'lucide-react';
 
 interface InsightsPageProps {
   goals: Goal[];
+  isDarkMode: boolean;
+  onToggleTheme: () => void;
 }
 
-export const InsightsPage: React.FC<InsightsPageProps> = ({ goals }) => {
+export const InsightsPage: React.FC<InsightsPageProps> = ({ goals, isDarkMode, onToggleTheme }) => {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -41,27 +43,41 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ goals }) => {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-3">
-          <Brain className="w-8 h-8 text-white" strokeWidth={1} />
+          <Brain className={`w-8 h-8 ${isDarkMode ? 'text-white' : 'text-gray-900'}`} strokeWidth={1} />
           <div>
-            <h1 className="text-xl font-semibold text-white">AI Insights</h1>
+            <h1 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>AI Insights</h1>
           </div>
         </div>
         
-        <Settings className="w-6 h-6 text-white" strokeWidth={1} />
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={onToggleTheme}
+            className={`p-2 rounded-full transition-colors ${
+              isDarkMode ? 'hover:bg-white/10' : 'hover:bg-black/10'
+            }`}
+          >
+            {isDarkMode ? (
+              <Sun className="w-6 h-6 text-white" strokeWidth={1} />
+            ) : (
+              <Moon className="w-6 h-6 text-gray-900" strokeWidth={1} />
+            )}
+          </button>
+          <Settings className={`w-6 h-6 ${isDarkMode ? 'text-white' : 'text-gray-900'}`} strokeWidth={1} />
+        </div>
       </div>
 
       {/* Insights List */}
       <div className="space-y-4">
         {loading ? (
-          <div className="bg-gray-800/40 backdrop-blur-xl rounded-3xl p-8 text-center border border-white/10">
+          <div className={`${isDarkMode ? 'bg-black' : 'bg-white'} rounded-3xl p-8 text-center ${isDarkMode ? 'border border-white/10' : 'border border-black/10'}`}>
             <div className="animate-spin w-8 h-8 border-2 border-white/30 border-t-white rounded-full mx-auto mb-4"></div>
-            <p className="text-white/70">Generating insights...</p>
+            <p className={`${isDarkMode ? 'text-white/70' : 'text-gray-600'}`}>Generating insights...</p>
           </div>
         ) : notifications.length === 0 ? (
-          <div className="bg-gray-800/40 backdrop-blur-xl rounded-3xl p-8 text-center border border-white/10">
-            <Brain className="w-12 h-12 text-white/60 mx-auto mb-4" strokeWidth={1.5} />
-            <h3 className="font-semibold text-white mb-2">No insights yet</h3>
-            <p className="text-white/70 text-sm">Add goals to receive personalized AI insights and recommendations.</p>
+          <div className={`${isDarkMode ? 'bg-black' : 'bg-white'} rounded-3xl p-8 text-center ${isDarkMode ? 'border border-white/10' : 'border border-black/10'}`}>
+            <Brain className={`w-12 h-12 ${isDarkMode ? 'text-white/60' : 'text-gray-600'} mx-auto mb-4`} strokeWidth={1.5} />
+            <h3 className={`font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'} mb-2`}>No insights yet</h3>
+            <p className={`${isDarkMode ? 'text-white/70' : 'text-gray-600'} text-sm`}>Add goals to receive personalized AI insights and recommendations.</p>
           </div>
         ) : (
           notifications.map(notification => (
@@ -69,6 +85,7 @@ export const InsightsPage: React.FC<InsightsPageProps> = ({ goals }) => {
               key={notification.id}
               notification={notification}
               onMarkAsRead={handleMarkAsRead}
+              isDarkMode={isDarkMode}
             />
           ))
         )}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Goal } from './types';
+import { Moon, Sun } from 'lucide-react';
 
 import { Dashboard } from './components/Dashboard';
 import { InsightsPage } from './components/InsightsPage';
@@ -52,7 +53,7 @@ function StartFocusBar({ activeGoal }: { activeGoal: Goal | null }) {
   };
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-28 z-40 flex items-center gap-2 bg-black/50 backdrop-blur px-3 py-2 rounded-xl text-white">
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-28 z-40 flex items-center gap-2 bg-black px-3 py-2 rounded-xl text-white">
       <button
         onClick={startDay}
         className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded transition"
@@ -65,6 +66,7 @@ function StartFocusBar({ activeGoal }: { activeGoal: Goal | null }) {
 }
 
 function App() {
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const [goals, setGoals] = useState<Goal[]>([
     {
       id: '1',
@@ -132,25 +134,31 @@ function App() {
     setEditingGoal(null);
   };
 
+  const toggleTheme = () => {
+    setIsDarkMode(!isDarkMode);
+  };
+
   return (
-    <div className="relative min-h-screen bg-gray-900 overflow-hidden">
+    <div className={`relative min-h-screen overflow-hidden ${isDarkMode ? 'bg-gray-900' : 'bg-gray-100'}`}>
       {/* Hintergrundbild + Overlay */}
       <div
         className="fixed inset-0 bg-cover bg-center bg-no-repeat"
         style={{
           backgroundImage:
-            'url(/ai-art-waterfall-sunset-mountains-China-2221536-wallhere.com.jpg)',
+            isDarkMode 
+              ? 'url(/ai-art-waterfall-sunset-mountains-China-2221536-wallhere.com.jpg)'
+              : 'url(/Zhangjiajie-National-Park-China-Sun-pillar-clouds-artwork-2186975-wallhere.com%20(1).jpg)',
         }}
       >
-        <div className="absolute inset-0 bg-black/70" />
+        <div className={`absolute inset-0 ${isDarkMode ? 'bg-black/70' : 'bg-white/70'}`} />
       </div>
 
       {/* Hauptinhalt */}
       <div className="relative z-10 min-h-screen pb-24">
         {currentPage === 'home' ? (
-          <Dashboard goals={goals} onEditGoal={handleEditGoal} />
+          <Dashboard goals={goals} onEditGoal={handleEditGoal} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
         ) : (
-          <InsightsPage goals={goals} />
+          <InsightsPage goals={goals} isDarkMode={isDarkMode} onToggleTheme={toggleTheme} />
         )}
 
         <StartFocusBar activeGoal={goals[0] || null} />
@@ -161,14 +169,16 @@ function App() {
         currentPage={currentPage}
         onPageChange={setCurrentPage}
         onCreateGoal={handleCreateGoal}
+        isDarkMode={isDarkMode}
       />
 
       {showGoalForm && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className={`fixed inset-0 ${isDarkMode ? 'bg-black/60' : 'bg-white/60'} backdrop-blur-sm flex items-center justify-center p-4 z-50`}>
           <GoalForm
             goal={editingGoal}
             onSave={handleSaveGoal}
             onCancel={handleCancelGoalForm}
+            isDarkMode={isDarkMode}
           />
         </div>
       )}

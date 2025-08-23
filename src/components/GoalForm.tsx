@@ -6,9 +6,10 @@ interface GoalFormProps {
   goal?: Goal;
   onSave: (goal: Omit<Goal, 'id' | 'createdAt'>) => void;
   onCancel: () => void;
+  isDarkMode: boolean;
 }
 
-export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) => {
+export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel, isDarkMode }) => {
   const [formData, setFormData] = useState({
     title: goal?.title || '',
     description: goal?.description || '',
@@ -28,42 +29,42 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) =>
   };
 
   return (
-    <div className="bg-gray-800/60 backdrop-blur-xl rounded-3xl p-6 max-w-sm w-full mx-4 border border-white/20">
+    <div className={`${isDarkMode ? 'bg-black' : 'bg-white'} rounded-3xl p-6 max-w-sm w-full mx-4 ${isDarkMode ? 'border border-white/20' : 'border border-black/20'}`}>
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-xl font-semibold text-white">
+        <h3 className={`text-xl font-semibold ${isDarkMode ? 'text-white' : 'text-gray-900'}`}>
           {goal ? 'Edit Goal' : 'Create Goal'}
         </h3>
         <button
           onClick={onCancel}
-          className="p-1 hover:bg-white/20 rounded-full transition-colors"
+          className={`p-1 ${isDarkMode ? 'hover:bg-white/20' : 'hover:bg-black/20'} rounded-full transition-colors`}
         >
-          <X className="w-5 h-5 text-white/70" strokeWidth={1.5} />
+          <X className={`w-5 h-5 ${isDarkMode ? 'text-white/70' : 'text-gray-600'}`} strokeWidth={1.5} />
         </button>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
+          <label className={`block text-sm font-medium ${isDarkMode ? 'text-white/90' : 'text-gray-800'} mb-2`}>
             Goal Title
           </label>
           <input
             type="text"
             value={formData.title}
             onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl focus:ring-2 focus:ring-white/30 focus:border-transparent text-white placeholder-white/60 backdrop-blur-sm"
+            className={`w-full px-4 py-3 ${isDarkMode ? 'bg-white/10 border-white/20 text-white placeholder-white/60' : 'bg-black/10 border-black/20 text-gray-900 placeholder-gray-500'} border rounded-2xl focus:ring-2 ${isDarkMode ? 'focus:ring-white/30' : 'focus:ring-black/30'} focus:border-transparent`}
             placeholder="Enter your goal title"
             required
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
+          <label className={`block text-sm font-medium ${isDarkMode ? 'text-white/90' : 'text-gray-800'} mb-2`}>
             Description
           </label>
           <textarea
             value={formData.description}
             onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl focus:ring-2 focus:ring-white/30 focus:border-transparent text-white placeholder-white/60 backdrop-blur-sm"
+            className={`w-full px-4 py-3 ${isDarkMode ? 'bg-white/10 border-white/20 text-white placeholder-white/60' : 'bg-black/10 border-black/20 text-gray-900 placeholder-gray-500'} border rounded-2xl focus:ring-2 ${isDarkMode ? 'focus:ring-white/30' : 'focus:ring-black/30'} focus:border-transparent`}
             placeholder="Describe your goal"
             rows={3}
             required
@@ -72,13 +73,13 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) =>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-2">
+            <label className={`block text-sm font-medium ${isDarkMode ? 'text-white/90' : 'text-gray-800'} mb-2`}>
               Category
             </label>
             <select
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value as GoalCategory })}
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl focus:ring-2 focus:ring-white/30 focus:border-transparent text-white backdrop-blur-sm"
+              className={`w-full px-4 py-3 ${isDarkMode ? 'bg-white/10 border-white/20 text-white' : 'bg-black/10 border-black/20 text-gray-900'} border rounded-2xl focus:ring-2 ${isDarkMode ? 'focus:ring-white/30' : 'focus:ring-black/30'} focus:border-transparent`}
             >
               <option value="career">Career</option>
               <option value="health">Health</option>
@@ -90,13 +91,13 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) =>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-white/90 mb-2">
+            <label className={`block text-sm font-medium ${isDarkMode ? 'text-white/90' : 'text-gray-800'} mb-2`}>
               Priority
             </label>
             <select
               value={formData.priority}
               onChange={(e) => setFormData({ ...formData, priority: e.target.value as Priority })}
-              className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl focus:ring-2 focus:ring-white/30 focus:border-transparent text-white backdrop-blur-sm"
+              className={`w-full px-4 py-3 ${isDarkMode ? 'bg-white/10 border-white/20 text-white' : 'bg-black/10 border-black/20 text-gray-900'} border rounded-2xl focus:ring-2 ${isDarkMode ? 'focus:ring-white/30' : 'focus:ring-black/30'} focus:border-transparent`}
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -107,19 +108,19 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) =>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
+          <label className={`block text-sm font-medium ${isDarkMode ? 'text-white/90' : 'text-gray-800'} mb-2`}>
             Target Date (Optional)
           </label>
           <input
             type="date"
             value={formData.targetDate}
             onChange={(e) => setFormData({ ...formData, targetDate: e.target.value })}
-            className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl focus:ring-2 focus:ring-white/30 focus:border-transparent text-white backdrop-blur-sm"
+            className={`w-full px-4 py-3 ${isDarkMode ? 'bg-white/10 border-white/20 text-white' : 'bg-black/10 border-black/20 text-gray-900'} border rounded-2xl focus:ring-2 ${isDarkMode ? 'focus:ring-white/30' : 'focus:ring-black/30'} focus:border-transparent`}
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-white/90 mb-2">
+          <label className={`block text-sm font-medium ${isDarkMode ? 'text-white/90' : 'text-gray-800'} mb-2`}>
             Progress: {formData.progress}%
           </label>
           <input
@@ -128,14 +129,14 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) =>
             max="100"
             value={formData.progress}
             onChange={(e) => setFormData({ ...formData, progress: parseInt(e.target.value) })}
-            className="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer slider"
+            className={`w-full h-2 ${isDarkMode ? 'bg-white/20' : 'bg-black/20'} rounded-lg appearance-none cursor-pointer slider`}
           />
         </div>
 
         <div className="flex space-x-3 pt-4">
           <button
             type="submit"
-            className="flex-1 bg-white text-gray-900 px-4 py-3 rounded-2xl hover:bg-white/90 transition-all duration-200 flex items-center justify-center space-x-2 font-medium"
+            className={`flex-1 ${isDarkMode ? 'bg-white text-gray-900 hover:bg-white/90' : 'bg-black text-white hover:bg-gray-800'} px-4 py-3 rounded-2xl transition-all duration-200 flex items-center justify-center space-x-2 font-medium`}
           >
             <Save className="w-4 h-4" strokeWidth={1.5} />
             <span>{goal ? 'Update' : 'Create'}</span>
@@ -143,7 +144,7 @@ export const GoalForm: React.FC<GoalFormProps> = ({ goal, onSave, onCancel }) =>
           <button
             type="button"
             onClick={onCancel}
-            className="px-4 py-3 border border-white/20 text-white/80 rounded-2xl hover:bg-white/10 transition-colors backdrop-blur-sm"
+            className={`px-4 py-3 border ${isDarkMode ? 'border-white/20 text-white/80 hover:bg-white/10' : 'border-black/20 text-gray-700 hover:bg-black/10'} rounded-2xl transition-colors`}
           >
             Cancel
           </button>
