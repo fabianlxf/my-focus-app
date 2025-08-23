@@ -19,7 +19,7 @@ app.use(cors());
 app.use(express.json());
 
 // --- OpenAI (nutzt Responses-API mit output_text)
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+const client = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
 
 // --- Web Push Setup
 webpush.setVapidDetails(
@@ -40,6 +40,9 @@ app.get('/api/health', (_req, res) => res.json({ ok: true }));
 // --- AI-Helfer
 async function generateOneInsight(goal: MiniGoal): Promise<{ title: string; content: string }> {
   try {
+    if (!client) {
+      return { title: 'Focus', content: 'Take a clear 5-minute step now.' };
+    }
     const r = await client.responses.create({
       model: 'gpt-4o-mini',
       temperature: 0.6,
@@ -111,6 +114,34 @@ app.post('/api/insights/start-day', async (req, res) => {
 // --- OPTIONAL: frühere AI-Endpunkte (falls benutzt)
 app.post('/api/ai/suggestions', async (req, res) => {
   try {
+    if (!client) {
+      return res.json({
+        suggestions: [
+          {
+            title: 'Start Small',
+            content: 'Break your goal into 5-minute actionable steps. Small progress compounds over time.',
+            type: 'insight',
+            source: 'Focus Coach',
+            relevanceScore: 0.9
+          },
+          {
+            title: 'Daily Consistency',
+            content: 'Focus on showing up every day rather than perfect performance. Consistency beats intensity.',
+            type: 'suggestion',
+            source: 'Focus Coach',
+            relevanceScore: 0.8
+          },
+          {
+            title: 'Track Progress',
+            content: 'Document your daily wins, no matter how small. Progress visibility boosts motivation.',
+            type: 'insight',
+            source: 'Focus Coach',
+            relevanceScore: 0.85
+          }
+        ]
+      });
+    }
+
     const goals = (req.body?.goals ?? []) as Array<any>;
     const goalsContext = goals.map(g =>
       `Goal: ${g.title} (${g.category}, ${g.priority} priority, ${g.progress}% complete) - ${g.description}`
@@ -137,6 +168,13 @@ app.post('/api/ai/suggestions', async (req, res) => {
 
 app.post('/api/ai/analyze', async (req, res) => {
   try {
+    if (!client) {
+      return res.json({
+        insight: 'Focus on one small step at a time. Progress happens through consistent daily action.',
+        nextStep: 'Identify the smallest possible action you can take right now and do it for 5 minutes.'
+      });
+    }
+
     const g = req.body?.goal ?? {};
     const r = await client.responses.create({
       model: 'gpt-4o-mini',
