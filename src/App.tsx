@@ -1,24 +1,19 @@
 import React, { useState } from 'react';
 import { Goal } from './types';
 
-// ⬇️ Falls deine Komponenten als named exports kommen, lass die geschweiften Klammern stehen.
-//    Wenn sie default-exported sind, nimm die Klammern weg.
 import { Dashboard } from './components/Dashboard';
 import { InsightsPage } from './components/InsightsPage';
 import { GoalForm } from './components/GoalForm';
 import { BottomNavigation } from './components/BottomNavigation';
 
-// ✅ wir nutzen den vorhandenen Push-Client
 import { enablePushForUser } from './pushClient';
 
-/** Kleine eingebaute Leiste: Tagesfokus starten -> sofort 1 Insight, später 2 Pushes */
 function StartFocusBar({ activeGoal }: { activeGoal: Goal | null }) {
   const [status, setStatus] = useState<string>("");
 
   const startDay = async () => {
     try {
       setStatus("Aktiviere Benachrichtigungen…");
-      // iOS braucht User-Geste – wenn schon erlaubt, ist das ein No-Op:
       await enablePushForUser("demo-user");
 
       if (!activeGoal) {
@@ -45,7 +40,6 @@ function StartFocusBar({ activeGoal }: { activeGoal: Goal | null }) {
       if (!res.ok) throw new Error("Start fehlgeschlagen");
       const data = await res.json();
 
-      // Sofortiger Insight in der UI als Bestätigung
       if (data?.insight?.title) {
         setStatus(`Insight: ${data.insight.title}`);
         setTimeout(() => setStatus("Tagesfokus läuft ✅"), 1500);
@@ -58,7 +52,7 @@ function StartFocusBar({ activeGoal }: { activeGoal: Goal | null }) {
   };
 
   return (
-    <div className="fixed left-1/2 -translate-x-1/2 bottom-24 z-50 flex items-center gap-2 bg-black/50 backdrop-blur px-3 py-2 rounded-xl text-white">
+    <div className="fixed left-1/2 -translate-x-1/2 bottom-28 z-40 flex items-center gap-2 bg-black/50 backdrop-blur px-3 py-2 rounded-xl text-white">
       <button
         onClick={startDay}
         className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 rounded transition"
@@ -152,14 +146,13 @@ function App() {
       </div>
 
       {/* Hauptinhalt */}
-      <div className="relative z-10 min-h-screen pb-20">
+      <div className="relative z-10 min-h-screen pb-24">
         {currentPage === 'home' ? (
           <Dashboard goals={goals} onEditGoal={handleEditGoal} />
         ) : (
           <InsightsPage goals={goals} />
         )}
 
-        {/* Tagesfokus starten: nimmt das erste Ziel als aktives */}
         <StartFocusBar activeGoal={goals[0] || null} />
       </div>
 
@@ -170,7 +163,6 @@ function App() {
         onCreateGoal={handleCreateGoal}
       />
 
-      {/* Goal Form Modal */}
       {showGoalForm && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <GoalForm

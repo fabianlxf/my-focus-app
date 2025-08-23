@@ -17,10 +17,10 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
       {/* Bottom Navigation */}
       <div className="fixed bottom-0 left-0 right-0 z-40">
         <div className="bg-gray-800/60 backdrop-blur-xl border-t border-white/10 px-4 py-2">
-          <div className="flex items-center justify-center space-x-20">
+          <div className="flex items-center justify-around max-w-md mx-auto">
             <button
               onClick={() => onPageChange('home')}
-              className={`flex flex-col items-center space-y-1 py-2 px-4 ${
+              className={`flex flex-col items-center space-y-1 py-3 px-6 ${
                 currentPage === 'home' ? 'text-white' : 'text-white/60'
               }`}
             >
@@ -30,7 +30,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
 
             <button
               onClick={() => onPageChange('insights')}
-              className={`flex flex-col items-center space-y-1 py-2 px-4 ${
+              className={`flex flex-col items-center space-y-1 py-3 px-6 ${
                 currentPage === 'insights' ? 'text-white' : 'text-white/60'
               }`}
             >
@@ -44,7 +44,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
       {/* Floating Plus Button */}
       <button
         onClick={onCreateGoal}
-        className="fixed bottom-6 right-6 z-50 w-14 h-14 bg-white rounded-full shadow-2xl flex items-center justify-center hover:scale-105 transition-transform"
+        className="fixed bottom-20 right-6 z-50 w-14 h-14 bg-white rounded-full shadow-2xl flex items-center justify-center hover:scale-105 transition-transform md:bottom-6"
       >
         <Plus className="w-7 h-7 text-gray-900" strokeWidth={1.5} />
       </button>

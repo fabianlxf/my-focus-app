@@ -30,15 +30,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         <Settings className="w-6 h-6 text-white" strokeWidth={1} />
       </div>
 
-      {/* Time Navigation */}
-      <div className="flex items-center space-x-6 mb-6">
-        <div className="flex items-center space-x-1">
-          <span className="text-white font-medium">Today</span>
-          <div className="w-1 h-1 bg-white rounded-full"></div>
-        </div>
-        <span className="text-white/60">Yesterday</span>
-      </div>
-
       {/* Statistics - Horizontal Layout */}
       <div className="grid grid-cols-3 gap-3 mb-6">
         {/* Main Progress Card */}

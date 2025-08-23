@@ -22,14 +22,8 @@ export const GoalCard: React.FC<GoalCardProps> = ({ goal, onClick }) => {
       className="bg-gray-800/40 backdrop-blur-xl rounded-3xl p-4 border border-white/10 cursor-pointer hover:bg-gray-800/50 transition-all duration-200"
       onClick={() => onClick(goal)}
     >
-      <div className="flex items-start space-x-4">
-        {/* Goal Image/Icon Placeholder */}
-        <div className="w-16 h-16 bg-gray-800/40 backdrop-blur-xl rounded-2xl flex items-center justify-center flex-shrink-0 border border-white/10">
-          <div className={`w-3 h-3 rounded-full ${categoryColors[goal.category]}`}></div>
-        </div>
-
-        {/* Goal Content */}
-        <div className="flex-1 min-w-0">
+      <div className="w-full">
+        <div className="w-full">
           <div className="flex items-start justify-between mb-2">
             <h3 className="text-white font-semibold text-base line-clamp-1">{goal.title}</h3>
             {goal.targetDate && (
@@ -42,7 +36,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({ goal, onClick }) => {
             )}
           </div>
 
-          <p className="text-white/70 text-sm mb-3 line-clamp-2">{goal.description}</p>
+          <p className="text-white/70 text-sm mb-4 line-clamp-2">{goal.description}</p>
 
           {/* Progress and Stats */}
           <div className="flex items-center justify-between">
@@ -56,9 +50,9 @@ export const GoalCard: React.FC<GoalCardProps> = ({ goal, onClick }) => {
           </div>
 
           {/* Progress Bar */}
-          <div className="w-full bg-white/20 rounded-full h-1 mt-3">
+          <div className="w-full bg-white/20 rounded-full h-2 mt-3">
             <div 
-              className="bg-white h-1 rounded-full transition-all duration-500"
+              className={`h-2 rounded-full transition-all duration-500 ${categoryColors[goal.category]}`}
               style={{ width: `${goal.progress}%` }}
             ></div>
           </div>
