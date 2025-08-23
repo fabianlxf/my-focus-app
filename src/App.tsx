@@ -147,7 +147,7 @@ function App() {
           backgroundImage:
             isDarkMode 
               ? 'url(/ai-art-waterfall-sunset-mountains-China-2221536-wallhere.com.jpg)'
-              : 'url(/Zhangjiajie-National-Park-China-Sun-pillar-clouds-artwork-2186975-wallhere.com%20(1).jpg)',
+              : 'url(/Zhangjiajie-National-Park-China-Sun-pillar-clouds-artwork-2186975-wallhere.com\\ \\(1\\).jpg)',
         }}
       >
         <div className={`absolute inset-0 ${isDarkMode ? 'bg-black/70' : 'bg-white/70'}`} />
