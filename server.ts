@@ -388,3 +388,36 @@ async function start() {
   app.listen(PORT, () => console.log(`Dev server up on http://localhost:${PORT}`));
 }
 start();
+/**
+ * POST /api/plan/day
+ * Body: { description: string }
+ * Returns: { events: [{ title, start, end, category }] }
+ */
+app.post('/api/plan/day', async (req, res) => {
+  try {
+    const description = req.body?.description || "";
+
+    const r = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Du bist ein Assistent, der aus Beschreibungen einen klaren Tagesplan mit Uhrzeiten, Events und Kategorien erstellt." },
+        { role: "user", content: `Beschreibung für den nächsten Tag:\n${description}\n\nErstelle einen JSON-Tagesplan mit Events: [{title, start, end, category}]` }
+      ],
+      temperature: 0.7,
+      max_tokens: 600,
+    });
+
+    const text = r.choices[0].message?.content || "{}";
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = { events: [] };
+    }
+
+    return res.json(json);
+  } catch (e: any) {
+    console.error("plan/day error", e);
+    return res.status(500).json({ error: "Plan generation failed" });
+  }
+});
