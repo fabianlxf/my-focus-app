@@ -420,4 +420,27 @@ app.post('/api/plan/day', async (req, res) => {
     console.error("plan/day error", e);
     return res.status(500).json({ error: "Plan generation failed" });
   }
+  // --- Poster-Liste aus /public/posters bereitstellen ---
+import fs from 'node:fs';
+import path from 'node:path';
+
+// Achtung: Wenn dein Code schon __dirname nutzt, diesen Block nur einmal definieren
+// (falls __dirname in deinem File noch nicht existiert):
+const __DIRNAME__ = (typeof __dirname !== 'undefined')
+  ? __dirname
+  : path.dirname(new URL(import.meta.url).pathname);
+
+// Liefere alle Bild-Dateien aus "public/posters" als URLs zurück
+app.get('/api/posters', (req, res) => {
+  try {
+    const postersDir = path.join(__DIRNAME__, 'public', 'posters');
+    if (!fs.existsSync(postersDir)) return res.json({ files: [] });
+    const files = fs.readdirSync(postersDir)
+      .filter(f => /\.(png|jpg|jpeg|webp|gif)$/i.test(f))
+      .map(f => `/posters/${f}`);
+    res.json({ files });
+  } catch (e) {
+    console.error('poster list error', e);
+    res.status(500).json({ error: 'failed to list posters' });
+  }
 });
