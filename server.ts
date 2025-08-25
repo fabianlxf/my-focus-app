@@ -420,6 +420,7 @@ app.post('/api/plan/day', async (req, res) => {
     console.error("plan/day error", e);
     return res.status(500).json({ error: "Plan generation failed" });
   }
+});
   // --- Poster-Liste aus /public/posters bereitstellen ---
 // Liefere alle Bild-Dateien aus "public/posters" als URLs zurück
 app.get('/api/posters', (req, res) => {
