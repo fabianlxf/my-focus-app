@@ -1,12 +1,14 @@
-// server.ts – Ein-Port Dev-Server: Express + Vite + API + Push + Tagesplanung
+// server.ts – Express + Vite + OpenAI + WebPush + Speech->Plan + ICS + 22:00 Reminder
 import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import path from 'node:path';
+import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { OpenAI } from 'openai';
 import webpush from 'web-push';
 import type { PushSubscription } from 'web-push';
+import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,42 +16,95 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT ?? 1234);
 
-// --- Middleware
 app.use(cors());
 app.use(express.json());
 
-// --- OpenAI (nutzt Responses-API mit output_text)
-const client = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
+const upload = multer({ storage: multer.memoryStorage() });
 
-// --- Web Push Setup
+// --- OpenAI
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
+
+// --- WebPush
 webpush.setVapidDetails(
   'mailto:you@example.com',
   process.env.VAPID_PUBLIC_KEY!,
   process.env.VAPID_PRIVATE_KEY!
 );
 
-// In-Memory Stores (Dev)
-const subscriptions = new Map<string, PushSubscription>(); // userId -> subscription
-type MiniGoal = { title: string; category: string; priority: string; progress: number; description: string; };
-const dayPlans = new Map<string, string>();                 // userId -> YYYY-MM-DD (nur 1x pro Tag planen)
-const dayTimers = new Map<string, NodeJS.Timeout[]>();      // userId -> geplante Timer
+// In-Memory Stores
+const subscriptions = new Map<string, PushSubscription>(); // userId -> sub
+const dayTimers = new Map<string, NodeJS.Timeout[]>();     // userId -> timers
+
+// Prefs (Reminder-Zeit, TZ)
+type Prefs = { reminderHour: number; reminderMinute: number; tz: string };
+const userPrefs = new Map<string, Prefs>();
+function getUserPrefs(userId: string): Prefs {
+  return userPrefs.get(userId) ?? { reminderHour: 22, reminderMinute: 0, tz: 'Europe/Berlin' };
+}
 
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
-// --- AI-Helfer
-async function generateOneInsight(goal: MiniGoal): Promise<{ title: string; content: string }> {
-  try {
-    if (!client) {
-      return { title: 'Focus', content: 'Take a clear 5-minute step now.' };
+// --- Push helpers
+function schedulePushAt(userId: string, when: Date, payload: { title: string; description?: string }) {
+  const delay = Math.max(0, when.getTime() - Date.now());
+  const timers = dayTimers.get(userId) ?? [];
+  const t = setTimeout(async () => {
+    try {
+      const sub = subscriptions.get(userId);
+      if (!sub) return;
+      await webpush.sendNotification(sub, JSON.stringify({
+        title: `Bald: ${payload.title}`,
+        body: (payload.description || 'Kleiner, klarer Startimpuls.').slice(0, 140),
+        url: '/plan'
+      }));
+    } catch (e) {
+      console.error('[push scheduled] error', e);
     }
+  }, delay);
+  timers.push(t);
+  dayTimers.set(userId, timers);
+}
+
+function clearUserTimers(userId: string) {
+  const old = dayTimers.get(userId) || [];
+  old.forEach(clearTimeout);
+  dayTimers.delete(userId);
+}
+
+// Save subscription
+app.post('/api/push/save-subscription', (req, res) => {
+  const { userId, subscription } = req.body || {};
+  if (!userId || !subscription) return res.status(400).json({ error: 'userId + subscription required' });
+  subscriptions.set(userId, subscription);
+  return res.json({ ok: true });
+});
+
+// Manual push (debug)
+app.post('/api/push/send', async (req, res) => {
+  const { userId, title, body, url } = req.body || {};
+  const sub = subscriptions.get(userId);
+  if (!sub) return res.status(404).json({ error: 'no subscription for user' });
+  try {
+    await webpush.sendNotification(sub, JSON.stringify({
+      title: title || 'Test',
+      body: body || 'Hallo',
+      url: url || '/'
+    }));
+    return res.json({ ok: true });
+  } catch (e) { return res.status(500).json({ error: 'push failed' }); }
+});
+
+// --- AI helper: Insight (optional)
+async function generateOneInsight(goalLike: { title: string; description?: string }) {
+  try {
     const r = await client.responses.create({
       model: 'gpt-4o-mini',
       temperature: 0.6,
       max_output_tokens: 250,
       input: [
-        { role: 'system', content: 'Return ONLY JSON: {"title":"...","content":"..."} with concise, practical, research-backed tip.' },
-        { role: 'user', content: `Create one focused insight for this goal:\n${JSON.stringify(goal)}` }
+        { role: 'system', content: 'Return ONLY JSON: {"title":"...","content":"..."} concise and practical.' },
+        { role: 'user', content: `Create one focused insight:\n${JSON.stringify(goalLike)}` }
       ]
     });
     const text = (r as any).output_text as string | undefined;
@@ -59,173 +114,235 @@ async function generateOneInsight(goal: MiniGoal): Promise<{ title: string; cont
   }
 }
 
-// --- Tagesplanung
-function schedulePush(userId: string, minutesFromNow: number, goal: MiniGoal) {
-  const timers = dayTimers.get(userId) ?? [];
-  const t = setTimeout(async () => {
-    try {
-      const sub = subscriptions.get(userId);
-      if (!sub) return; // kein Abo vorhanden (oder Server restart)
-      const insight = await generateOneInsight(goal);
-      await webpush.sendNotification(sub, JSON.stringify({
-        title: `Neuer Insight: ${insight.title || 'Weiterkommen'}`,
-        body: (insight.content || 'Kleiner, klarer Schritt jetzt.').slice(0, 120),
-        url: '/today'
-      }));
-    } catch (e) {
-      console.error('[push scheduled] error', e);
-    }
-  }, minutesFromNow * 60 * 1000);
-  timers.push(t);
-  dayTimers.set(userId, timers);
+// --- Planner types & state
+type PlannedTask = {
+  title: string;
+  start: string;   // ISO
+  end: string;     // ISO
+  category?: string;
+  location?: string;
+  needsInput?: boolean;
+  inputPrompts?: string[];
+};
+type NextDayPlan = {
+  date: string;        // YYYY-MM-DD
+  timezone?: string;
+  tasks: PlannedTask[];
+};
+const plansByUser = new Map<string, NextDayPlan>();
+
+// --- Planner (LLM)
+async function generateNextDayPlan(
+  userText: string,
+  opts: { dayISO?: string; startHour?: number; endHour?: number; includeInputs?: boolean; tz?: string }
+): Promise<NextDayPlan> {
+  const day = opts.dayISO ?? new Date(Date.now() + 24*60*60*1000).toISOString().slice(0,10);
+  const tz = opts.tz ?? 'Europe/Berlin';
+  const startH = Number.isFinite(opts.startHour) ? opts.startHour! : 9;
+  const endH   = Number.isFinite(opts.endHour)   ? opts.endHour!   : 18;
+
+  const r = await client.responses.create({
+    model: 'gpt-4o-mini',
+    temperature: 0.4,
+    max_output_tokens: 900,
+    input: [
+      {
+        role: 'system',
+        content:
+`You plan a realistic next-day schedule.
+Return ONLY valid JSON with shape:
+{
+  "date":"YYYY-MM-DD",
+  "timezone":"${tz}",
+  "tasks":[
+    {"title":"...", "start":"YYYY-MM-DDTHH:mm:00", "end":"YYYY-MM-DDTHH:mm:00",
+     "category":"fitness|finances|learning|personal|work|creativity|social|mind|org|impact|other",
+     "location":"...", "needsInput":true|false, "inputPrompts":["...","..."]}
+  ]
+}
+Rules:
+- Fit tasks into ${startH}:00–${endH}:00 (local).
+- Respect fixed times mentioned by the user.
+- Keep tasks atomic (30–120 min) and add short breaks.
+- If includeInputs=false, set needsInput=false and omit inputPrompts.`
+      },
+      {
+        role: 'user',
+        content:
+`Plan the next day based on this description:
+Day: ${day}, Work window: ${startH}:00-${endH}:00, IncludeInputs=${!!opts.includeInputs}
+User notes:\n${userText}`
+      }
+    ]
+  });
+
+  const text = (r as any).output_text as string | undefined;
+  try {
+    const json = JSON.parse(text ?? '{}');
+    return {
+      date: json.date ?? day,
+      timezone: json.timezone ?? tz,
+      tasks: Array.isArray(json.tasks) ? json.tasks : []
+    };
+  } catch {
+    return { date: day, timezone: tz, tasks: [] };
+  }
 }
 
-// --- Startet einen Fokus-Tag: Sofort-Insight + 2 spätere Pushes
-app.post('/api/insights/start-day', async (req, res) => {
-  try {
-    const { userId, goal } = req.body || {};
-    if (!userId || !goal) return res.status(400).json({ error: 'userId + goal required' });
-
-    const today = new Date().toISOString().slice(0, 10);
-    let planned = false;
-
-    if (dayPlans.get(userId) !== today) {
-      // Alte Timer stoppen
-      const old = dayTimers.get(userId) || [];
-      old.forEach(clearTimeout);
-      dayTimers.delete(userId);
-
-      // 2 Benachrichtigungen im Tagesverlauf (Zeitpunkte anpassen nach Wunsch)
-      schedulePush(userId, 180, goal); // +3h
-      schedulePush(userId, 420, goal); // +7h
-
-      dayPlans.set(userId, today);
-      planned = true;
-    }
-
-    const insight = await generateOneInsight(goal);
-    return res.json({ planned, insight });
-  } catch (e) {
-    console.error('[start-day] error', e);
-    return res.status(500).json({ error: 'start-day failed' });
+function schedulePlanPushes(userId: string, plan: NextDayPlan) {
+  clearUserTimers(userId);
+  for (const t of plan.tasks) {
+    const startMs = new Date(t.start).getTime();
+    const when = new Date(startMs - 10 * 60 * 1000); // 10 Min vorher
+    schedulePushAt(userId, when, { title: t.title, description: t.inputPrompts?.[0] });
   }
-});
+}
 
-// --- OPTIONAL: frühere AI-Endpunkte (falls benutzt)
-app.post('/api/ai/suggestions', async (req, res) => {
+// --- ICS
+function pad2(n: number) { return n < 10 ? '0'+n : String(n); }
+function toUtcBasic(d: Date) {
+  return d.getUTCFullYear().toString() +
+    pad2(d.getUTCMonth()+1) +
+    pad2(d.getUTCDate()) + 'T' +
+    pad2(d.getUTCHours()) +
+    pad2(d.getUTCMinutes()) +
+    pad2(d.getUTCSeconds()) + 'Z';
+}
+function escapeICS(text: string) {
+  return (text || '').replace(/\\/g,'\\\\').replace(/;/g,'\\;').replace(/,/g,'\\,').replace(/\n/g,'\\n');
+}
+function buildICS(userId: string, plan: NextDayPlan) {
+  const now = new Date();
+  const dtstamp = toUtcBasic(now);
+  let ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Focus Coach//EN',
+    'CALSCALE:GREGORIAN'
+  ];
+  plan.tasks.forEach((t, idx) => {
+    const uid = `${userId}-${plan.date}-${idx}@focuscoach`;
+    const s = new Date(t.start);
+    const e = new Date(t.end);
+    ics.push(
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${dtstamp}`,
+      `DTSTART:${toUtcBasic(s)}`,
+      `DTEND:${toUtcBasic(e)}`,
+      `SUMMARY:${escapeICS(t.title)}`,
+      t.location ? `LOCATION:${escapeICS(t.location)}` : '',
+      t.needsInput && t.inputPrompts?.length ? `DESCRIPTION:${escapeICS(t.inputPrompts.join(' | '))}` : '',
+      'END:VEVENT'
+    );
+  });
+  ics.push('END:VCALENDAR');
+  return ics.filter(Boolean).join('\r\n');
+}
+
+// --- STT
+app.post('/api/stt', upload.single('file'), async (req, res) => {
   try {
-    if (!client) {
-      return res.json({
-        suggestions: [
-          {
-            title: 'Start Small',
-            content: 'Break your goal into 5-minute actionable steps. Small progress compounds over time.',
-            type: 'insight',
-            source: 'Focus Coach',
-            relevanceScore: 0.9
-          },
-          {
-            title: 'Daily Consistency',
-            content: 'Focus on showing up every day rather than perfect performance. Consistency beats intensity.',
-            type: 'suggestion',
-            source: 'Focus Coach',
-            relevanceScore: 0.8
-          },
-          {
-            title: 'Track Progress',
-            content: 'Document your daily wins, no matter how small. Progress visibility boosts motivation.',
-            type: 'insight',
-            source: 'Focus Coach',
-            relevanceScore: 0.85
-          }
-        ]
-      });
-    }
+    const buf = req.file?.buffer;
+    const orig = req.file?.originalname || 'audio.webm';
+    if (!buf) return res.status(400).json({ error: 'no audio' });
 
-    const goals = (req.body?.goals ?? []) as Array<any>;
-    const goalsContext = goals.map(g =>
-      `Goal: ${g.title} (${g.category}, ${g.priority} priority, ${g.progress}% complete) - ${g.description}`
-    ).join('\n');
+    const tmp = path.join(__dirname, `tmp-${Date.now()}-${orig}`);
+    fs.writeFileSync(tmp, buf);
 
-    const r = await client.responses.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.7,
-      max_output_tokens: 800,
-      input: [
-        { role: 'system', content: 'Return ONLY JSON: {"suggestions":[{title,content,type,source,relevanceScore},...]}' },
-        { role: 'user', content: `Based on these goals, provide 3-4 items.\n\n${goalsContext}` }
-      ]
+    const tr = await client.audio.transcriptions.create({
+      file: fs.createReadStream(tmp) as any,
+      model: 'whisper-1',
+      language: 'de'
     });
 
-    const text = (r as any).output_text as string | undefined;
-    const json = (() => { try { return JSON.parse(text ?? '{}'); } catch { return { suggestions: [] }; }})();
-    return res.json(json);
+    fs.unlinkSync(tmp);
+    return res.json({ text: tr.text || '' });
   } catch (e) {
-    console.error('suggestions error', e);
-    return res.status(500).json({ error: 'AI suggestions failed' });
+    console.error('[stt] error', e);
+    return res.status(500).json({ error: 'stt failed' });
   }
 });
 
-app.post('/api/ai/analyze', async (req, res) => {
+// --- Audio -> Plan -> Nudges -> ICS
+app.post('/api/plan/from-speech', upload.single('file'), async (req, res) => {
   try {
-    if (!client) {
-      return res.json({
-        insight: 'Focus on one small step at a time. Progress happens through consistent daily action.',
-        nextStep: 'Identify the smallest possible action you can take right now and do it for 5 minutes.'
-      });
+    const { userId = 'demo-user', includeInputs = 'true', startHour = '9', endHour = '18' } = req.body || {};
+    if (!req.file) return res.status(400).json({ error: 'no audio' });
+
+    const buf = req.file.buffer;
+    const orig = req.file.originalname || 'speech.m4a';
+    const tmp = path.join(__dirname, `tmp-${Date.now()}-${orig}`);
+    fs.writeFileSync(tmp, buf);
+
+    const tr = await client.audio.transcriptions.create({
+      file: fs.createReadStream(tmp) as any,
+      model: 'whisper-1',
+      language: 'de'
+    });
+    fs.unlinkSync(tmp);
+    const text = tr.text || '';
+
+    const plan = await generateNextDayPlan(text, {
+      includeInputs: includeInputs === 'true',
+      startHour: Number(startHour),
+      endHour: Number(endHour),
+      tz: getUserPrefs(userId).tz
+    });
+    plansByUser.set(userId, plan);
+
+    schedulePlanPushes(userId, plan);
+
+    const icsUrl = `/api/plan/ics?userId=${encodeURIComponent(userId)}&date=${encodeURIComponent(plan.date)}`;
+    return res.json({ text, plan, icsUrl });
+  } catch (e) {
+    console.error('[plan/from-speech] error', e);
+    return res.status(500).json({ error: 'plan-from-speech failed' });
+  }
+});
+
+// ICS download
+app.get('/api/plan/ics', (req, res) => {
+  const userId = String(req.query.userId || '');
+  const date = String(req.query.date || '');
+  if (!userId || !date) return res.status(400).send('userId and date required');
+  const plan = plansByUser.get(userId);
+  if (!plan || plan.date !== date) return res.status(404).send('plan not found');
+  const ics = buildICS(userId, plan);
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="plan-${date}.ics"`);
+  res.send(ics);
+});
+
+// Reminder prefs
+app.get('/api/reminder/prefs', (req, res) => {
+  const userId = String(req.query.userId || 'demo-user');
+  return res.json(getUserPrefs(userId));
+});
+app.post('/api/reminder/prefs', (req, res) => {
+  const { userId = 'demo-user', hour = 22, minute = 0, tz = 'Europe/Berlin' } = req.body || {};
+  userPrefs.set(userId, { reminderHour: Number(hour), reminderMinute: Number(minute), tz });
+  res.json({ ok: true });
+});
+
+// Reminder Ticker (jede Minute)
+setInterval(async () => {
+  for (const [userId, sub] of subscriptions.entries()) {
+    const prefs = getUserPrefs(userId);
+    const now = new Date();
+    if (now.getHours() === prefs.reminderHour && now.getMinutes() === prefs.reminderMinute) {
+      try {
+        await webpush.sendNotification(sub, JSON.stringify({
+          title: 'Zeit für deinen Plan',
+          body: 'Beschreibe jetzt deinen morgigen Tag. Ich trage alles ein.',
+          url: '/plan'
+        }));
+      } catch { /* ignore */ }
     }
-
-    const g = req.body?.goal ?? {};
-    const r = await client.responses.create({
-      model: 'gpt-4o-mini',
-      temperature: 0.6,
-      max_output_tokens: 200,
-      input: [
-        { role: 'system', content: 'Return ONLY JSON: {"insight":"...","nextStep":"..."}' },
-        { role: 'user', content: `Analyze: ${JSON.stringify(g)}` }
-      ]
-    });
-
-    const text = (r as any).output_text as string | undefined;
-    const json = (() => { try { return JSON.parse(text ?? '{}'); } catch { return {}; }})();
-    return res.json({
-      insight: json.insight ?? 'Keep going!',
-      nextStep: json.nextStep ?? 'Do one 10-minute step now.'
-    });
-  } catch (e) {
-    console.error('analyze error', e);
-    return res.status(500).json({ error: 'AI analyze failed' });
   }
-});
+}, 60 * 1000);
 
-// --- Push-API
-app.post('/api/push/save-subscription', (req, res) => {
-  const { userId, subscription } = req.body || {};
-  if (!userId || !subscription) return res.status(400).json({ error: 'userId + subscription required' });
-  subscriptions.set(userId, subscription);
-  console.log('[PUSH] save-subscription for', userId);
-  return res.json({ ok: true });
-});
-
-app.post('/api/push/send', async (req, res) => {
-  const { userId, title, body, url } = req.body || {};
-  const sub = subscriptions.get(userId);
-  if (!sub) return res.status(404).json({ error: 'no subscription for user' });
-  try {
-    await webpush.sendNotification(sub, JSON.stringify({
-      title: title || 'Test-Nudge',
-      body: body || 'Hallo! Das ist eine Test-Benachrichtigung.',
-      url: url || '/'
-    }));
-    console.log('[PUSH] sent to', userId);
-    return res.json({ ok: true });
-  } catch (e) {
-    console.error('push error', e);
-    return res.status(500).json({ error: 'push failed' });
-  }
-});
-
-// --- DEV: Vite-Middleware (liefert UI & Assets) / PROD: dist/
+// --- Vite Dev / Static
 async function start() {
   if (process.env.NODE_ENV !== 'production') {
     const vite = await (await import('vite')).createServer({
@@ -234,7 +351,6 @@ async function start() {
     });
     app.use(vite.middlewares);
 
-    // Fallback: alle Nicht-/api Routen -> index.html via Vite
     app.use(async (req, res, next) => {
       if (req.originalUrl.startsWith('/api/')) return next();
       try {
@@ -259,7 +375,7 @@ async function start() {
 </html>`);
         res.status(200).setHeader('Content-Type', 'text/html').end(html);
       } catch (e) {
-        vite.ssrFixStacktrace(e as Error);
+        (vite as any).ssrFixStacktrace?.(e as Error);
         next(e);
       }
     });
@@ -269,9 +385,6 @@ async function start() {
     app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
   }
 
-  app.listen(PORT, () => {
-    console.log(`Dev server up on http://localhost:${PORT}`);
-  });
+  app.listen(PORT, () => console.log(`Dev server up on http://localhost:${PORT}`));
 }
-
 start();
