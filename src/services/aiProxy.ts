@@ -58,3 +58,12 @@ export async function analyzeGoalProgress(goal: Goal): Promise<{ insight: string
   }
   return res.json();
 }
+export async function generateDayPlan(description: string) {
+  const res = await fetch(`${API_BASE}/api/plan/day`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ description }),
+  });
+  if (!res.ok) throw new Error("Plan generation failed");
+  return res.json();
+}
