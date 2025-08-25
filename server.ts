@@ -7,8 +7,6 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { OpenAI } from 'openai';
 import webpush from 'web-push';
-import type { PushSubscription } from 'web-push';
-import multer from 'multer';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -18,8 +16,6 @@ const PORT = Number(process.env.PORT ?? 1234);
 
 app.use(cors());
 app.use(express.json());
-
-const upload = multer({ storage: multer.memoryStorage() });
 
 // --- OpenAI
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
@@ -241,23 +237,9 @@ function buildICS(userId: string, plan: NextDayPlan) {
 }
 
 // --- STT
-app.post('/api/stt', upload.single('file'), async (req, res) => {
+app.post('/api/stt', async (req, res) => {
   try {
-    const buf = req.file?.buffer;
-    const orig = req.file?.originalname || 'audio.webm';
-    if (!buf) return res.status(400).json({ error: 'no audio' });
-
-    const tmp = path.join(__dirname, `tmp-${Date.now()}-${orig}`);
-    fs.writeFileSync(tmp, buf);
-
-    const tr = await client.audio.transcriptions.create({
-      file: fs.createReadStream(tmp) as any,
-      model: 'whisper-1',
-      language: 'de'
-    });
-
-    fs.unlinkSync(tmp);
-    return res.json({ text: tr.text || '' });
+    return res.status(400).json({ error: 'file upload not supported without multer' });
   } catch (e) {
     console.error('[stt] error', e);
     return res.status(500).json({ error: 'stt failed' });
@@ -265,36 +247,9 @@ app.post('/api/stt', upload.single('file'), async (req, res) => {
 });
 
 // --- Audio -> Plan -> Nudges -> ICS
-app.post('/api/plan/from-speech', upload.single('file'), async (req, res) => {
+app.post('/api/plan/from-speech', async (req, res) => {
   try {
-    const { userId = 'demo-user', includeInputs = 'true', startHour = '9', endHour = '18' } = req.body || {};
-    if (!req.file) return res.status(400).json({ error: 'no audio' });
-
-    const buf = req.file.buffer;
-    const orig = req.file.originalname || 'speech.m4a';
-    const tmp = path.join(__dirname, `tmp-${Date.now()}-${orig}`);
-    fs.writeFileSync(tmp, buf);
-
-    const tr = await client.audio.transcriptions.create({
-      file: fs.createReadStream(tmp) as any,
-      model: 'whisper-1',
-      language: 'de'
-    });
-    fs.unlinkSync(tmp);
-    const text = tr.text || '';
-
-    const plan = await generateNextDayPlan(text, {
-      includeInputs: includeInputs === 'true',
-      startHour: Number(startHour),
-      endHour: Number(endHour),
-      tz: getUserPrefs(userId).tz
-    });
-    plansByUser.set(userId, plan);
-
-    schedulePlanPushes(userId, plan);
-
-    const icsUrl = `/api/plan/ics?userId=${encodeURIComponent(userId)}&date=${encodeURIComponent(plan.date)}`;
-    return res.json({ text, plan, icsUrl });
+    return res.status(400).json({ error: 'file upload not supported without multer' });
   } catch (e) {
     console.error('[plan/from-speech] error', e);
     return res.status(500).json({ error: 'plan-from-speech failed' });
