@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import SpeechInput from "./components/SpeechInput";
 import { generateDayPlan } from "./services/aiProxy";
-import FlameDashboard, { Category, getFlameState } from "./components/FlameDashboard.tsx";
+import FlameDashboard, { Category, getFlameState } from "./components/FlameDashboard";
 
 type Page = "home" | "gallery" | "reports";
 
@@ -36,13 +36,11 @@ function loadCategories(): Category[] {
   } catch {}
   return DEFAULT_CATS;
 }
-
 function saveCategories(cats: Category[]) {
   try {
     localStorage.setItem(LOCAL_KEY_CATS, JSON.stringify(cats));
   } catch {}
 }
-
 function slugify(s: string) {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
 }
@@ -70,7 +68,7 @@ export default function App() {
     saveCategories(categories);
   }, [categories]);
 
-  // Master-Percent für Visuals
+  // Master-Percent Anzeige (aus FlameDashboard-Logik abgeleitet)
   const masterPercent = useMemo(() => {
     const now = new Date();
     const activeCount = categories.filter((c) => {
@@ -80,33 +78,28 @@ export default function App() {
     return Math.round((activeCount / Math.max(1, categories.length)) * 100);
   }, [categories, graceHours]);
 
-  // Markiert Kategorien als aktiv, basierend auf KI-Plan (heute / nächster Tag)
+  // Kategorien anhand des KI-Plans „anfeuern“
   function markCategoriesActiveFromPlan(events: PlanEvent[]) {
     const nowISO = new Date().toISOString();
-    // Sammle Kategorien aus Events
     const found = new Set<string>();
     for (const ev of events) {
       const cat = (ev.category || "").trim();
-      if (!cat) continue;
-      found.add(cat);
+      if (cat) found.add(cat);
     }
-
     if (found.size === 0) return;
 
     setCategories((prev) => {
       const next = [...prev];
-      const have = new Map<string, number>();
-      next.forEach((c, i) => have.set(c.id, i));
+      const idxById = new Map<string, number>();
+      next.forEach((c, i) => idxById.set(c.id, i));
 
       for (const raw of found) {
         const id = slugify(raw);
-        if (have.has(id)) {
-          // existierende Kategorie -> lastActive updaten
-          const idx = have.get(id)!;
-          next[idx] = { ...next[idx], lastActiveISO: nowISO };
+        if (idxById.has(id)) {
+          const i = idxById.get(id)!;
+          next[i] = { ...next[i], lastActiveISO: nowISO };
         } else {
-          // unbekannte Kategorie -> hinzufügen (Custom)
-          next.push({ id, name: raw, lastActiveISO: nowISO });
+          next.push({ id, name: raw, lastActiveISO: nowISO }); // Custom-Kategorie
         }
       }
       return next;
@@ -140,34 +133,36 @@ export default function App() {
             <div className="mt-1 text-sm opacity-90">{masterPercent}%</div>
             <p className="mt-4 opacity-80 text-sm">Tippen / wischen zum Fortfahren</p>
           </div>
+
+          <style>
+            {`@keyframes posterBreath {
+              0% { transform: scale(1.02); }
+              50% { transform: scale(1.06); }
+              100% { transform: scale(1.02); }
+            }`}
+          </style>
         </div>
       )}
-
-      <style>
-        {`@keyframes posterBreath {
-          0% { transform: scale(1.02); }
-          50% { transform: scale(1.06); }
-          100% { transform: scale(1.02); }
-        }`}
-      </style>
 
       {/* Main Pages */}
       <div className="relative z-10 min-h-screen pb-20 p-4">
         {currentPage === "home" && (
           <div className="space-y-4">
-            {/* Tages-Input Kachel */}
+            {/* „Heute’s Input“ Kachel */}
             <div className="bg-white/5 border border-white/10 rounded-xl p-3">
               <div className="text-sm opacity-80 mb-1">Heute’s Input</div>
               <button className="text-left w-full">
                 <div className="text-base">Interessanter Fakt über Dschingis Khan →</div>
-                <div className="text-xs opacity-70">Weil du gerade viel über Aufbau/Skalierung sprichst.</div>
+                <div className="text-xs opacity-70">
+                  Weil du gerade viel über Aufbau/Skalierung sprichst.
+                </div>
               </button>
             </div>
 
             {/* Flammen */}
             <FlameDashboard categories={categories} graceHours={graceHours} />
 
-            {/* Geplanter Tagesplan (falls vorhanden) */}
+            {/* Geplanter Tagesplan */}
             {dayPlan.length > 0 ? (
               <div className="space-y-2">
                 <h2 className="text-lg font-semibold">Morgenplan</h2>
@@ -234,7 +229,7 @@ export default function App() {
             const plan = await generateDayPlan(text);
             const events: PlanEvent[] = Array.isArray(plan?.events) ? plan.events : [];
             setDayPlan(events);
-            // Kategorien aus dem Plan markieren (aktiv)
+            // Kategorien aus dem Plan „anfeuern“
             markCategoriesActiveFromPlan(events);
             alert("Dein Plan für morgen wurde erstellt!");
           } catch {
