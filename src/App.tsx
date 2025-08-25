@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import SpeechInput from "./components/SpeechInput";
 import { generateDayPlan } from "./services/aiProxy";
-import FlameDashboard from "./components/FlameDashboard.tsx";
+import FlameDashboard from "./components/FlameDashboard";
 
 type Page = "home" | "gallery" | "reports";
 
