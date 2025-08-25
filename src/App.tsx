@@ -1,9 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import SpeechInput from "./components/SpeechInput";
 import { generateDayPlan } from "./services/aiProxy";
-import FlameDashboard, { Category, getFlameState } from "./components/FlameDashboard";
+import FlameDashboard from "./components/FlameDashboard";
 
 type Page = "home" | "gallery" | "reports";
+
+type Category = {
+  id: string;
+  name: string;
+  lastActiveISO?: string;
+};
 
 type PlanEvent = {
   title: string;
@@ -25,6 +31,17 @@ const DEFAULT_CATS: Category[] = [
   { id: "character", name: "Charakter" },
   { id: "impact", name: "Impact" },
 ];
+
+function getFlameState(lastActiveISO: string | undefined, graceHours: number, now: Date): "active" | "grace" | "cold" {
+  if (!lastActiveISO) return "cold";
+  
+  const lastActive = new Date(lastActiveISO);
+  const diffHours = (now.getTime() - lastActive.getTime()) / (1000 * 60 * 60);
+  
+  if (diffHours <= 24) return "active";
+  if (diffHours <= 24 + graceHours) return "grace";
+  return "cold";
+}
 
 const LOCAL_KEY_CATS = "app.categories.v1";
 const LOCAL_KEY_POSTER_SHOWN = "app.posterShown.today.v1";
