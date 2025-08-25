@@ -43,6 +43,35 @@ function getUserPrefs(userId: string): Prefs {
 // Health
 app.get('/api/health', (_req, res) => res.json({ ok: true }));
 
+// --- Poster-Liste aus /public/posters bereitstellen ---
+app.get("/api/posters", async (_req, res) => {
+  try {
+    const postersDir = `${process.cwd()}/public/posters`;
+    const fs = await import("node:fs/promises");
+
+    // Falls der Ordner nicht existiert → leere Liste
+    let dirents: any[] = [];
+    try {
+      // @ts-ignore
+      dirents = await fs.readdir(postersDir, { withFileTypes: true });
+    } catch (e: any) {
+      if (e?.code === "ENOENT") return res.json([]);
+      throw e;
+    }
+
+    const files = dirents
+      .filter((d: any) => (d.isFile ? d.isFile() : true))
+      .map((d: any) => (d.name ? d.name : d))
+      .filter((name: string) => /\.(png|jpe?g|webp|gif)$/i.test(name))
+      .map((name: string) => ({ url: `/posters/${name}`, name }));
+
+    return res.json(files);
+  } catch (e) {
+    console.error("poster list error", e);
+    return res.status(500).json({ error: "failed to list posters" });
+  }
+});
+
 // --- Push helpers
 function schedulePushAt(userId: string, when: Date, payload: { title: string; description?: string }) {
   const delay = Math.max(0, when.getTime() - Date.now());
@@ -417,20 +446,5 @@ app.post('/api/plan/day', async (req, res) => {
   } catch (e: any) {
     console.error("plan/day error", e);
     return res.status(500).json({ error: "Plan generation failed" });
-  }
-});
-  // --- Poster-Liste aus /public/posters bereitstellen ---
-// Liefere alle Bild-Dateien aus "public/posters" als URLs zurück
-app.get('/api/posters', (req, res) => {
-  try {
-    const postersDir = path.join(__dirname, 'public', 'posters');
-    if (!fs.existsSync(postersDir)) return res.json({ files: [] });
-    const files = fs.readdirSync(postersDir)
-      .filter(f => /\.(png|jpg|jpeg|webp|gif)$/i.test(f))
-      .map(f => `/posters/${f}`);
-    res.json({ files });
-  } catch (e) {
-    console.error('poster list error', e);
-    res.status(500).json({ error: 'failed to list posters' });
   }
 });
