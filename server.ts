@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import multer from 'multer';
 import { OpenAI } from 'openai';
 import webpush from 'web-push';
 import type { PushSubscription } from 'web-push';
