@@ -4,7 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import multer from 'multer';
+import * as multer from 'multer';
 import { OpenAI } from 'openai';
 import webpush from 'web-push';
 import type { PushSubscription } from 'web-push';
@@ -18,7 +18,7 @@ const PORT = Number(process.env.PORT ?? 1234);
 app.use(cors());
 app.use(express.json());
 
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer.default({ storage: multer.default.memoryStorage() });
 
 // --- OpenAI
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
